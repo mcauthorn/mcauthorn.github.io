@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Coordination Costs</title>
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
+            rel="stylesheet"
+        />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+                background-color: #f8fafc;
+            }
+            .chart-container {
+                //background-color: white;
+                //background-color: #a0a0a0;
+                background-color: #e4e9eb;
+                border: 1px solid #e5e7eb;
+                border-radius: 0.75rem;
+                box-shadow:
+                    0 4px 6px -1px rgb(0 0 0 / 0.1),
+                    0 2px 4px -2px rgb(0 0 0 / 0.1);
+            }
+            .node-label {
+                font-size: 12px;
+                font-weight: 500;
+                fill: #374151;
+                pointer-events: none;
+                padding-top: 4px;
+            }
+            .link {
+                stroke: #93c5fd;
+                stroke-opacity: 0.7;
+                stroke-width: 2px;
+            }
+            .node-circle {
+                stroke: #3b82f6;
+                stroke-width: 1px;
+                fill: #bfdbfe;
+            }
+            .central-node .node-circle {
+                fill: #60a5fa;
+            }
+            .central-node .node-label {
+                font-weight: 700;
+            }
+            .chart-title {
+                font-size: 1.125rem;
+                font-weight: 600;
+                color: #1f2937;
+            }
+            .axis-label {
+                font-size: 0.875rem;
+                fill: #4b5563;
+            }
+            .chart-line {
+                fill: none;
+                stroke: #3b82f6;
+                stroke-width: 2.5px;
+            }
+            .chart-dot {
+                fill: #3b82f6;
+            }
+        </style>
+    </head>
+    <body
+        class="bg-slate-50 flex flex-col items-center justify-center min-h-screen p-4 md:p-6"
+    >
+        <div class="w-full max-w-5xl text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">
+                Coordination Costs for Presales
+            </h1>
+            <p class="text-lg text-gray-600 mt-2">
+                Visualizing the impact of stakeholder growth on productivity.
+            </p>
+        </div>
+
+        <div class="w-full max-w-5xl grid grid-cols-1 gap-6">
+            <!-- Network Visualization -->
+            <div
+                id="visualization"
+                class="chart-container w-full h-[50vh]"
+            ></div>
+
+            <!-- Line Charts -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div
+                    id="cost-chart"
+                    class="chart-container w-full h-[40vh] p-4"
+                ></div>
+                <div
+                    id="productivity-chart"
+                    class="chart-container w-full h-[40vh] p-4"
+                ></div>
+            </div>
+        </div>
+
+        <div
+            class="mt-6 p-4 bg-white rounded-lg shadow-md flex items-center space-x-4"
+        >
+            <button
+                id="reset-btn"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-all"
+            >
+                Reset Animation
+            </button>
+            <div class="text-gray-700">
+                <span class="font-semibold">Stakeholders:</span>
+                <span id="node-count">1</span> |
+                <span class="font-semibold">Connections:</span>
+                <span id="link-count">0</span>
+            </div>
+        </div>
+
+        <script>
+            // --- CONFIGURATION ---
+            const stakeholderNames = [
+                "Sales Rep",
+                "Other SEs",
+                "Channel Partners",
+                "Product Management",
+                "Sales Leadership",
+                "Customers",
+                "Marketing",
+            ];
+            const K_COST = 10; // Cost constant for C(n) = k*n
+            const LAMBDA_DECAY = 0.23; // Decay constant for P(n) = Pmax * e^(-λn)
+            const P_MAX = 100; // Max productivity
+            const ADD_INTERVAL_MS = 1500; // 1.5 seconds
+
+            // --- SHARED STATE ---
+            let nodes = [];
+            let links = [];
+            let stakeholderIndex = 0;
+            let animationInterval;
+
+            // --- NETWORK VISUALIZATION ---
+            const networkSvgContainer = d3.select("#visualization");
+            let networkWidth, networkHeight;
+            let networkSvg, linkGroup, nodeGroup;
+
+            const nodeRadius = 25;
+            const centralNodeRadius = 30;
+
+            function initializeNetworkSvg() {
+                networkWidth = networkSvgContainer
+                    .node()
+                    .getBoundingClientRect().width;
+                networkHeight = networkSvgContainer
+                    .node()
+                    .getBoundingClientRect().height;
+
+                networkSvgContainer.select("svg").remove();
+
+                networkSvg = networkSvgContainer
+                    .append("svg")
+                    .attr("viewBox", `0 0 ${networkWidth} ${networkHeight}`);
+                linkGroup = networkSvg.append("g");
+                nodeGroup = networkSvg.append("g");
+            }
+
+            // --- CHART SETUP ---
+            function setupChart(containerId, title, yLabel) {
+                const margin = { top: 40, right: 30, bottom: 50, left: 50 };
+                const container = d3.select(containerId);
+                const width =
+                    container.node().getBoundingClientRect().width -
+                    margin.left -
+                    margin.right;
+                const height =
+                    container.node().getBoundingClientRect().height -
+                    margin.top -
+                    margin.bottom;
+
+                const svg = container
+                    .append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr(
+                        "transform",
+                        `translate(${margin.left},${margin.top})`,
+                    );
+
+                svg.append("text")
+                    .attr("class", "chart-title")
+                    .attr("x", width / 2)
+                    .attr("y", -margin.top / 2)
+                    .attr("text-anchor", "middle")
+                    .text(title);
+
+                const x = d3
+                    .scaleLinear()
+                    .domain([0, stakeholderNames.length])
+                    .range([0, width]);
+                const y = d3.scaleLinear().range([height, 0]);
+
+                const xAxis = svg
+                    .append("g")
+                    .attr("transform", `translate(0,${height})`)
+                    .call(d3.axisBottom(x).ticks(stakeholderNames.length));
+                const yAxis = svg.append("g").call(d3.axisLeft(y));
+
+                svg.append("text")
+                    .attr("class", "axis-label")
+                    .attr("text-anchor", "middle")
+                    .attr("x", width / 2)
+                    .attr("y", height + margin.bottom - 10)
+                    .text("Number of Stakeholders");
+                svg.append("text")
+                    .attr("class", "axis-label")
+                    .attr("text-anchor", "middle")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", -margin.left + 15)
+                    .attr("x", -height / 2)
+                    .text(yLabel);
+
+                const path = svg.append("path").attr("class", "chart-line");
+                const dots = svg.append("g");
+
+                return { svg, x, y, xAxis, yAxis, path, dots, width, height };
+            }
+
+            const costChart = setupChart(
+                "#cost-chart",
+                "Coordination Cost (Linear Growth)",
+                "Cost Units",
+            );
+            const prodChart = setupChart(
+                "#productivity-chart",
+                "Productivity (Exponential Decline)",
+                "Productivity (%)",
+            );
+
+            // --- CORE LOGIC ---
+            function initialize() {
+                clearInterval(animationInterval);
+
+                initializeNetworkSvg();
+
+                const centralX = networkWidth / 2;
+                const centralY = networkHeight * 0.6;
+
+                nodes = [
+                    {
+                        id: 0,
+                        name: "Presales Engineer",
+                        isCentral: true,
+                        radius: centralNodeRadius,
+                        x: centralX,
+                        y: centralY,
+                    },
+                ];
+                links = [];
+                stakeholderIndex = 0;
+                updateNetworkVisualization();
+
+                updateCostChart([]);
+                updateProductivityChart([]);
+
+                updateCounters();
+
+                animationInterval = d3.interval(
+                    addStakeholder,
+                    ADD_INTERVAL_MS,
+                );
+            }
+
+            function addStakeholder() {
+                if (stakeholderIndex >= stakeholderNames.length) {
+                    clearInterval(animationInterval);
+                    return;
+                }
+
+                const newNodeId = nodes.length;
+
+                const numStakeholders = stakeholderNames.length;
+                const spacing = networkWidth / (numStakeholders + 1);
+                const newX = spacing * (stakeholderIndex + 1);
+                const newY = networkHeight * 0.2;
+
+                nodes.push({
+                    id: newNodeId,
+                    name: stakeholderNames[stakeholderIndex],
+                    isCentral: false,
+                    radius: nodeRadius,
+                    x: newX,
+                    y: newY,
+                });
+                links.push({ source: newNodeId, target: 0 });
+
+                stakeholderIndex++;
+
+                updateAllVisualizations();
+            }
+
+            function updateAllVisualizations() {
+                updateNetworkVisualization();
+
+                const chartData = d3.range(stakeholderIndex + 1).map((i) => {
+                    return {
+                        n: i,
+                        cost: K_COST * i,
+                        productivity: P_MAX * Math.exp(-LAMBDA_DECAY * i),
+                    };
+                });
+
+                updateCostChart(chartData);
+                updateProductivityChart(chartData);
+                updateCounters();
+            }
+
+            // --- UPDATE VISUALIZATIONS ---
+            function updateNetworkVisualization() {
+                const link = linkGroup
+                    .selectAll("line.link")
+                    .data(links, (d) => `${d.source}-${d.target}`);
+
+                link.exit()
+                    .transition()
+                    .duration(500)
+                    .style("stroke-opacity", 0)
+                    .remove();
+
+                link.enter()
+                    .append("line")
+                    .attr("class", "link")
+                    .attr("x1", (d) => nodes[d.source].x)
+                    .attr("y1", (d) => nodes[d.source].y)
+                    .attr("x2", (d) => nodes[d.source].x)
+                    .attr("y2", (d) => nodes[d.source].y)
+                    .transition()
+                    .duration(500)
+                    .attr("x2", (d) => nodes[d.target].x)
+                    .attr("y2", (d) => nodes[d.target].y);
+
+                const node = nodeGroup
+                    .selectAll("g.node")
+                    .data(nodes, (d) => d.id);
+
+                node.exit()
+                    .transition()
+                    .duration(500)
+                    .style("opacity", 0)
+                    .remove();
+
+                const nodeEnter = node
+                    .enter()
+                    .append("g")
+                    .attr("class", (d) =>
+                        d.isCentral ? "node central-node" : "node",
+                    )
+                    .attr("transform", (d) => `translate(${d.x},${d.y})`);
+
+                nodeEnter
+                    .append("circle")
+                    .attr("class", "node-circle")
+                    .attr("r", 0)
+                    .transition()
+                    .duration(500)
+                    .attr("r", (d) => d.radius);
+
+                nodeEnter
+                    .append("text")
+                    .attr("class", "node-label")
+                    .attr("text-anchor", "middle")
+                    .attr("y", (d) =>
+                        d.isCentral ? d.radius + 20 : -(d.radius + 10),
+                    ) // Position label below for central, above for others
+                    .text((d) => d.name);
+
+                nodeEnter
+                    .merge(node)
+                    .transition()
+                    .duration(500)
+                    .attr("transform", (d) => `translate(${d.x},${d.y})`);
+            }
+
+            function updateCostChart(data) {
+                costChart.y.domain([0, K_COST * stakeholderNames.length]);
+                costChart.yAxis
+                    .transition()
+                    .duration(500)
+                    .call(d3.axisLeft(costChart.y));
+
+                const lineGenerator = d3
+                    .line()
+                    .x((d) => costChart.x(d.n))
+                    .y((d) => costChart.y(d.cost));
+                costChart.path
+                    .datum(data)
+                    .transition()
+                    .duration(500)
+                    .attr("d", lineGenerator);
+
+                const dots = costChart.dots
+                    .selectAll("circle")
+                    .data(data, (d) => d.n);
+
+                dots.exit().transition().duration(500).attr("r", 0).remove();
+
+                dots.enter()
+                    .append("circle")
+                    .attr("class", "chart-dot")
+                    .attr("cx", (d) => costChart.x(d.n))
+                    .attr("cy", (d) => costChart.y(d.cost))
+                    .attr("r", 0)
+                    .transition()
+                    .duration(500)
+                    .attr("r", 4);
+            }
+
+            function updateProductivityChart(data) {
+                prodChart.y.domain([0, P_MAX]);
+                prodChart.yAxis
+                    .transition()
+                    .duration(500)
+                    .call(d3.axisLeft(prodChart.y));
+
+                const lineGenerator = d3
+                    .line()
+                    .x((d) => prodChart.x(d.n))
+                    .y((d) => prodChart.y(d.productivity));
+                prodChart.path
+                    .datum(data)
+                    .transition()
+                    .duration(500)
+                    .attr("d", lineGenerator);
+
+                const dots = prodChart.dots
+                    .selectAll("circle")
+                    .data(data, (d) => d.n);
+
+                dots.exit().transition().duration(500).attr("r", 0).remove();
+
+                dots.enter()
+                    .append("circle")
+                    .attr("class", "chart-dot")
+                    .attr("cx", (d) => prodChart.x(d.n))
+                    .attr("cy", (d) => prodChart.y(d.productivity))
+                    .attr("r", 0)
+                    .transition()
+                    .duration(500)
+                    .attr("r", 4);
+            }
+
+            function updateCounters() {
+                d3.select("#node-count").text(nodes.length);
+                d3.select("#link-count").text(links.length);
+            }
+
+            window.addEventListener("resize", () => {
+                initialize();
+            });
+
+            d3.select("#reset-btn").on("click", initialize);
+
+            initialize();
+        </script>
+    </body>
+</html>
