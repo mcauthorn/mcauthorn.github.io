@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Presales Account Distribution</title>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            body {
+                font-family: "Open Sans", sans-serif;
+                margin: 0;
+                padding: 10px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                background-color: #ffffff;
+            }
+
+            .legend {
+                display: flex;
+                justify-content: center;
+                gap: 30px;
+                margin-bottom: 10px;
+            }
+
+            .legend-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 14px;
+                color: #333;
+            }
+
+            .legend-color {
+                width: 20px;
+                height: 20px;
+                border-radius: 3px;
+            }
+
+            .chart-container {
+                position: relative;
+                width: 100%;
+                max-width: 500px;
+                height: auto;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .center-text {
+                position: absolute;
+                text-align: left;
+                pointer-events: none;
+                color: #4a4a4a;
+                font-size: 16px;
+                line-height: 1.5;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+
+            .center-text.visible {
+                opacity: 1;
+            }
+
+            .description-text {
+                text-align: center;
+                color: #4a4a4a;
+                font-size: 14px;
+                line-height: 1.4;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px 20px 20px 20px;
+                min-height: 60px;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+
+            .description-text.visible {
+                opacity: 1;
+            }
+
+            .controls {
+                margin-top: 5px;
+                display: flex;
+                gap: 30px;
+            }
+
+            .radio-group {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .radio-group input[type="radio"] {
+                cursor: pointer;
+                width: 18px;
+                height: 18px;
+            }
+
+            .radio-group label {
+                cursor: pointer;
+                color: #333;
+                font-size: 16px;
+            }
+
+            .tooltip {
+                position: absolute;
+                padding: 10px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                border-radius: 5px;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.2s;
+                font-size: 14px;
+            }
+        </style>
+    </head>
+    <body>
+        <h3>Different Accounts, Different Treatment</h3>
+        <div class="legend">
+            <div class="legend-item">
+                <div
+                    class="legend-color"
+                    style="background-color: #1e5a8a"
+                ></div>
+                <span>Make</span>
+            </div>
+            <div class="legend-item">
+                <div
+                    class="legend-color"
+                    style="background-color: #4a90d9"
+                ></div>
+                <span>Sell</span>
+            </div>
+            <div class="legend-item">
+                <div
+                    class="legend-color"
+                    style="background-color: #a8c8ec"
+                ></div>
+                <span>Support</span>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <svg id="chart"></svg>
+            <div class="center-text" id="centerText"></div>
+        </div>
+
+        <div class="description-text" id="descriptionText"></div>
+
+        <div class="controls">
+            <div class="radio-group">
+                <input
+                    type="radio"
+                    id="account1"
+                    name="account"
+                    value="1"
+                    checked
+                />
+                <label for="account1">Account 1</label>
+            </div>
+            <div class="radio-group">
+                <input type="radio" id="account2" name="account" value="2" />
+                <label for="account2">Account 2</label>
+            </div>
+            <div class="radio-group">
+                <input type="radio" id="account3" name="account" value="3" />
+                <label for="account3">Account 3</label>
+            </div>
+        </div>
+
+        <div class="tooltip" id="tooltip"></div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+        <script>
+            // Account data
+            const accounts = {
+                1: {
+                    overview:
+                        "A major account with an established footprint. You're in contact with them regularly and advise them on various use cases and support tasks that are too small for professional services and don't qualify for a break/fix support ticket request.",
+                    data: [
+                        { category: "Make", value: 20 },
+                        { category: "Sell", value: 20 },
+                        { category: "Support", value: 60 },
+                    ],
+                },
+                2: {
+                    overview:
+                        "A qualified, net-new opportunity with a unique and complex environment that you need to creatively align with.",
+                    data: [
+                        { category: "Make", value: 20 },
+                        { category: "Sell", value: 80 },
+                        { category: "Support", value: 0 },
+                    ],
+                },
+                3: {
+                    overview:
+                        "An established account that is active with M&A activities. They have several new opportunities with new stakeholders within the organization. You need to strike a balance between the established footprint and the new opportunities and contacts within the account.",
+                    data: [
+                        { category: "Make", value: 33 },
+                        { category: "Sell", value: 33 },
+                        { category: "Support", value: 34 },
+                    ],
+                },
+            };
+
+            // Color scheme - shades of blue
+            const colorScale = d3
+                .scaleOrdinal()
+                .domain(["Make", "Sell", "Support"])
+                .range(["#1e5a8a", "#4a90d9", "#a8c8ec"]);
+
+            // Dimensions
+            const width = 500;
+            const height = 500;
+            const radius = Math.min(width, height) / 2 - 20; // Reduced radius to create space
+            const innerRadius = radius * 0.6;
+
+            // Create SVG with viewBox for responsiveness - expanded viewBox for hover animation
+            const svg = d3
+                .select("#chart")
+                .attr("viewBox", `-20 -20 ${width + 40} ${height + 40}`)
+                .attr("preserveAspectRatio", "xMidYMid meet")
+                .style("width", "100%")
+                .style("height", "auto");
+
+            const g = svg
+                .append("g")
+                .attr("transform", `translate(${width / 2}, ${height / 2})`);
+
+            // Create arc generator
+            const arc = d3.arc().innerRadius(innerRadius).outerRadius(radius);
+
+            // Create pie layout
+            const pie = d3
+                .pie()
+                .value((d) => d.value)
+                .sort(null);
+
+            // Tooltip
+            const tooltip = d3.select("#tooltip");
+
+            // Center text element
+            const centerText = d3.select("#centerText");
+            const descriptionText = d3.select("#descriptionText");
+
+            // Initialize with empty data
+            let currentData = [];
+
+            // Create initial empty paths
+            const paths = g
+                .selectAll("path")
+                .data(pie([]))
+                .enter()
+                .append("path")
+                .attr("fill", (d) => colorScale(d.data.category))
+                .attr("stroke", "white")
+                .attr("stroke-width", 2)
+                .style("cursor", "pointer");
+
+            // Update function
+            function updateChart(accountNumber) {
+                const account = accounts[accountNumber];
+
+                // Update description text below chart
+                descriptionText.text(account.overview).classed("visible", true);
+
+                // Update center text with percentages
+                const percentagesText = account.data
+                    .filter((d) => d.value > 0)
+                    .map((d) => `${d.category}: <b>${d.value}%</b>`)
+                    .join("\n");
+
+                centerText
+                    .html(percentagesText.replace(/\n/g, "<br>"))
+                    .classed("visible", true);
+
+                // Update pie data
+                const newData = pie(account.data);
+
+                // Update paths with animation
+                const pathSelection = g.selectAll("path").data(newData);
+
+                // Remove old paths
+                pathSelection
+                    .exit()
+                    .transition()
+                    .duration(500)
+                    .attrTween("d", function (d) {
+                        const interpolate = d3.interpolate(this._current, {
+                            startAngle: 0,
+                            endAngle: 0,
+                        });
+                        return function (t) {
+                            return arc(interpolate(t));
+                        };
+                    })
+                    .remove();
+
+                // Add new paths
+                pathSelection
+                    .enter()
+                    .append("path")
+                    .attr("fill", (d) => colorScale(d.data.category))
+                    .attr("stroke", "white")
+                    .attr("stroke-width", 2)
+                    .style("cursor", "pointer")
+                    .each(function (d) {
+                        this._current = { startAngle: 0, endAngle: 0 };
+                    })
+                    .on("mouseover", function (event, d) {
+                        d3.select(this)
+                            .transition()
+                            .duration(200)
+                            .attr("transform", function (d) {
+                                const [x, y] = arc.centroid(d);
+                                return `translate(${x * 0.05}, ${y * 0.05})`;
+                            });
+
+                        tooltip
+                            .style("opacity", 1)
+                            .html(`${d.data.category}: ${d.data.value}%`)
+                            .style("left", event.pageX + 10 + "px")
+                            .style("top", event.pageY - 10 + "px");
+                    })
+                    .on("mouseout", function (event, d) {
+                        d3.select(this)
+                            .transition()
+                            .duration(200)
+                            .attr("transform", "translate(0, 0)");
+
+                        tooltip.style("opacity", 0);
+                    })
+                    .merge(pathSelection)
+                    .transition()
+                    .duration(750)
+                    .attrTween("d", function (d) {
+                        const interpolate = d3.interpolate(
+                            this._current || { startAngle: 0, endAngle: 0 },
+                            d,
+                        );
+                        this._current = interpolate(1);
+                        return function (t) {
+                            return arc(interpolate(t));
+                        };
+                    });
+
+                // Update existing paths
+                pathSelection
+                    .on("mouseover", function (event, d) {
+                        d3.select(this)
+                            .transition()
+                            .duration(200)
+                            .attr("transform", function (d) {
+                                const [x, y] = arc.centroid(d);
+                                return `translate(${x * 0.05}, ${y * 0.05})`;
+                            });
+
+                        tooltip
+                            .style("opacity", 1)
+                            .html(`${d.data.category}: ${d.data.value}%`)
+                            .style("left", event.pageX + 10 + "px")
+                            .style("top", event.pageY - 10 + "px");
+                    })
+                    .on("mouseout", function (event, d) {
+                        d3.select(this)
+                            .transition()
+                            .duration(200)
+                            .attr("transform", "translate(0, 0)");
+
+                        tooltip.style("opacity", 0);
+                    });
+            }
+
+            // Radio button event listeners
+            document
+                .querySelectorAll('input[name="account"]')
+                .forEach((radio) => {
+                    radio.addEventListener("change", function () {
+                        updateChart(parseInt(this.value));
+                    });
+                });
+
+            // Initial state - Account 1 selected by default
+            updateChart(1);
+        </script>
+    </body>
+</html>
