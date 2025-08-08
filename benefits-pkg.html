@@ -5,7 +5,6 @@
 <title>Benefits Package Chart Preview</title>
 <body>
     <div id="chartBenefits">
-      <p class="intro"> <i>Click the radio buttons for differences between core, augmented and intangible components. </i></p>
       <div class="controls">
         <div class="radio-group">
           <label><input type="radio" name="scenario" value="core" checked> Core value </label>
@@ -19,9 +18,7 @@
           <title>The Benefits Package – concentric rings of Core, Augmented & Intangible value</title>
           <desc>Interactive diagram showing how different stakeholders weight Core, Augmented and Intangible benefits</desc>
         </svg>
-        <div class="tooltip"></div>
       </div>
-
       <p class="caption"></p>
     </div>
 
@@ -33,11 +30,9 @@
     #chartBenefits .radio-group{display:flex;align-items:center;gap:8px;font-size:14px;}
     #chartBenefits input[type="radio"]{accent-color:#4a90d9;font-size:14px;cursor:pointer;}
     #chartBenefits .chart-container{position:relative;width:100%;max-width:520px;overflow:visible;}
-    #chartBenefits .tooltip{position:absolute;padding:10px;background:rgba(0,0,0,.8);color:#fff;border-radius:5px;pointer-events:none;font-size:14px;opacity:0;transition:opacity .2s;}
     #chartBenefits text.label{font-size:14px;font-weight:600;dominant-baseline:middle;pointer-events:none;}
-    #chartBenefits .caption{margin-top:5px;font-size:14px;font-weight:400;text-align:center;color:#333;max-width:520px;
+    #chartBenefits .caption{margin-top:-25px;font-size:14px;font-weight:400;text-align:center;color:#333;max-width:520px;
         opacity:0;transition: opacity 0.75s ease;}
-    #chartBenefits .intro{margin-top:5px;font-size:16px;font-weight:500;text-align:center;color:#333;max-width:520px;}
     #chartBenefits text.label {font-size:14px;font-weight:600;dominant-baseline:middle;pointer-events:none;transition:font-size 0.75s ease,font-weight 0.75s ease;}
     #chartBenefits text.label.emphasized {font-size:20px;font-weight:800;}
     #chartBenefits .caption.visible {opacity:1;}
@@ -133,17 +128,6 @@
                .attrTween('d', function(d){ const i=d3.interpolate(this._current,d); this._current=i(1); return t=>arc(i(t)); });
 
           paths.exit().remove();
-
-          /* ----- Tooltip ----- */
-          const tip = d3.select(root).select('.tooltip');
-          paths.on('mousemove', (event,d)=>{
-                 const current = raw.find(x=>x.level===d.level);
-                 tip.style('opacity',1)
-                    .html(`${d.level}: ${current.value}`)
-                    .style('left',event.offsetX+15+'px')
-                    .style('top', event.offsetY-15+'px');
-               })
-               .on('mouseout', () => tip.style('opacity',0));
 
           /* ----- Labels & leader lines ----- */
           const angles = [-Math.PI/2, 0, Math.PI/2];
