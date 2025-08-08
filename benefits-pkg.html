@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Benefits Package Chart Preview</title>
+<body>
+    <div id="chartBenefits">
+      <p class="intro"> <i>Click the radio buttons for differences between core, augmented and intangible components. </i></p>
+      <div class="controls">
+        <div class="radio-group">
+          <label><input type="radio" name="scenario" value="core" checked> Core value </label>
+          <label><input type="radio" name="scenario" value="augmented"> Augmented value </label>
+          <label><input type="radio" name="scenario" value="intangible"> Intangible value </label>
+        </div>
+      </div>
+
+      <div class="chart-container">
+        <svg role="img">
+          <title>The Benefits Package – concentric rings of Core, Augmented & Intangible value</title>
+          <desc>Interactive diagram showing how different stakeholders weight Core, Augmented and Intangible benefits</desc>
+        </svg>
+        <div class="tooltip"></div>
+      </div>
+
+      <p class="caption"></p>
+    </div>
+
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap');
+
+    #chartBenefits{font-family:'Open Sans',sans-serif;display:flex;flex-direction:column;align-items:center;padding:5px;}
+    #chartBenefits .controls{display:flex;flex-wrap:wrap;gap:24px;margin:10px 0 30px;}
+    #chartBenefits .radio-group{display:flex;align-items:center;gap:8px;font-size:14px;}
+    #chartBenefits input[type="radio"]{accent-color:#4a90d9;font-size:14px;cursor:pointer;}
+    #chartBenefits .chart-container{position:relative;width:100%;max-width:520px;overflow:visible;}
+    #chartBenefits .tooltip{position:absolute;padding:10px;background:rgba(0,0,0,.8);color:#fff;border-radius:5px;pointer-events:none;font-size:14px;opacity:0;transition:opacity .2s;}
+    #chartBenefits text.label{font-size:14px;font-weight:600;dominant-baseline:middle;pointer-events:none;}
+    #chartBenefits .caption{margin-top:5px;font-size:14px;font-weight:400;text-align:center;color:#333;max-width:520px;
+        opacity:0;transition: opacity 0.75s ease;}
+    #chartBenefits .intro{margin-top:5px;font-size:16px;font-weight:500;text-align:center;color:#333;max-width:520px;}
+    #chartBenefits text.label {font-size:14px;font-weight:600;dominant-baseline:middle;pointer-events:none;transition:font-size 0.75s ease,font-weight 0.75s ease;}
+    #chartBenefits text.label.emphasized {font-size:20px;font-weight:800;}
+    #chartBenefits .caption.visible {opacity:1;}
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script>(function(){
+      const onD3 = cb => window.d3 ? cb() : setTimeout(() => onD3(cb), 50);
+      onD3(initChart);
+
+      function initChart(){
+        /* ---------- DATA ---------- */
+        const scenarios = {
+          core:       [{level:"Core",value:70},{level:"Augmented",value:40},{level:"Intangible",value:20}],
+          augmented:  [{level:"Core",value:20},{level:"Augmented",value:70},{level:"Intangible",value:40}],
+          intangible: [{level:"Core",value:30},{level:"Augmented",value:40},{level:"Intangible",value:80}]
+        };
+        const captions = {
+          core: "<b>Technical stakeholders</b> typically prioritize CORE value: deep product knowledge, architecture expertise, and hands-on technical credibility. Focus here when selling to engineers, architects, or technical decision-makers.",
+          augmented: "<b>Business stakeholders</b> typically value AUGMENTED skills: clear communication, industry knowledge, compelling demos, and objection handling. This matters most with procurement, management, and cross-functional teams.",
+          intangible: "<b>C-level and strategic buyers</b> often respond to INTANGIBLE qualities: strategic thinking, executive presence, and personal credibility. Your reputation and thought leadership drive these high-stakes conversations."
+        };
+        const state = { scenario:"core" };
+        let isInitialLoad = true;
+
+        /* ---------- ELEMENTS ---------- */
+        const root = document.getElementById("chartBenefits");
+        const svg  = d3.select(root).select("svg")
+                      .attr("viewBox","-270 -230 540 460")
+                      .attr("preserveAspectRatio","xMidYMid meet");
+        const g = svg.append("g");
+        const captionEl = root.querySelector('.caption');
+
+        /* ---------- LISTENERS ---------- */
+        root.querySelectorAll('input[name="scenario"]').forEach(r =>
+          r.addEventListener('change', e => {
+            state.scenario = e.target.value;
+            isInitialLoad = false;
+            updateChart();
+          })
+        );
+
+        /* ---------- SCALES ---------- */
+        const colour = d3.scaleOrdinal()
+                         .domain(["Core","Augmented","Intangible"])
+                         .range(["#4a90d9","#89b4e5","#6b96c7"]);
+
+        updateChart();
+
+        /* ---------- UPDATE ---------- */
+        function updateChart(){
+          // ---- dynamic caption ----
+          if (isInitialLoad) {
+            // First load: show caption immediately
+            captionEl.innerHTML= captions[state.scenario];
+            captionEl.classList.add('visible');
+          } else {
+            // Subsequent changes: fade transition
+            captionEl.classList.remove('visible');
+            setTimeout(() => {
+              captionEl.innerHTML = captions[state.scenario];
+              setTimeout(() => {
+                captionEl.classList.add('visible');
+              }, 10); // Small delay to ensure text change is processed
+            }, 200); // Wait for fade out to be visible
+          }
+
+          const raw   = scenarios[state.scenario];
+          const total = d3.sum(raw, d=>d.value);
+          let inner   = 0;
+          const gap   = 0, R = 180;
+
+          const rings = raw.map(d => {
+            const t = (d.value/total) * (R - (raw.length-1)*gap);
+            const r = { level:d.level, innerRadius:inner, outerRadius:inner+t };
+            inner = r.outerRadius + gap; return r; }).reverse();
+
+          const arc = d3.arc().startAngle(0).endAngle(2*Math.PI)
+                         .innerRadius(d=>d.innerRadius)
+                         .outerRadius(d=>d.outerRadius);
+
+          /* ----- Rings ----- */
+          const paths = g.selectAll('path.ring').data(rings, d=>d.level);
+
+          paths.enter().append('path').attr('class','ring')
+               .attr('fill', d=>colour(d.level))
+               .attr('stroke','#000').attr('stroke-width',.5)
+               .attr('opacity', d => d.level.toLowerCase() === state.scenario ? 1 : 0.4)
+               .each(function(d){ this._current = {innerRadius:d.innerRadius, outerRadius:d.innerRadius}; })
+            .merge(paths)
+               .transition().duration(750)
+               .attr('opacity', d => d.level.toLowerCase() === state.scenario ? 1 : 0.4)
+               .attrTween('d', function(d){ const i=d3.interpolate(this._current,d); this._current=i(1); return t=>arc(i(t)); });
+
+          paths.exit().remove();
+
+          /* ----- Tooltip ----- */
+          const tip = d3.select(root).select('.tooltip');
+          paths.on('mousemove', (event,d)=>{
+                 const current = raw.find(x=>x.level===d.level);
+                 tip.style('opacity',1)
+                    .html(`${d.level}: ${current.value}`)
+                    .style('left',event.offsetX+15+'px')
+                    .style('top', event.offsetY-15+'px');
+               })
+               .on('mouseout', () => tip.style('opacity',0));
+
+          /* ----- Labels & leader lines ----- */
+          const angles = [-Math.PI/2, 0, Math.PI/2];
+          const labelGroup = g.selectAll('g.labelWrap').data(rings, d=>d.level);
+          const enterLbl = labelGroup.enter().append('g').attr('class','labelWrap');
+          enterLbl.append('line').attr('class','leader').attr('stroke','#000').attr('stroke-width',1);
+          enterLbl.append('text').attr('class','label');
+
+          labelGroup.merge(enterLbl).each(function(d,i){
+            const angle = angles[i];
+            const rMid  = d.outerRadius;
+            const offset = 24;
+
+            const x1 = rMid * Math.cos(angle);
+            const y1 = rMid * Math.sin(angle);
+            const x2 = (rMid + offset) * Math.cos(angle);
+            const y2 = (rMid + offset) * Math.sin(angle);
+
+            let anchor, padX = 0, padY = 0;
+            const isVert = Math.abs(Math.round(angle*180/Math.PI)) === 90;
+            if(isVert){
+              anchor = 'middle';
+              padY   = angle < 0 ? -8 : 16;
+            }else{
+              anchor = angle > 0 ? 'start' : 'end';
+              padX   = anchor === 'start' ? -85 : 85;
+            }
+
+            d3.select(this).select('line')
+              .transition().duration(750)
+              .attr('x1',x1).attr('y1',y1)
+              .attr('x2',x2).attr('y2',y2);
+
+            d3.select(this).select('text')
+              .text(d.level)
+              .classed('emphasized', d.level.toLowerCase() === state.scenario)
+              .transition().duration(750)
+              .attr('text-anchor',anchor)
+              .attr('x', function() {
+                  const isEmphasized = d.level.toLowerCase() === state.scenario;
+                  const adjustedPadX = isVert ? padX : (anchor === 'start' ? -105 : 115);
+                  return x2 + (isEmphasized ? adjustedPadX : padX);
+                })
+              .attr('y',y2 + padY);
+          });
+
+          labelGroup.exit().remove();
+        }
+      }
+    })();</script>
+</body>
+</html>
