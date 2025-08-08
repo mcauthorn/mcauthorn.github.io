@@ -1,0 +1,299 @@
+<div id="presalesSpiderChart">
+  <h2>Presales Engineer Skillset Analysis</h2>
+  <div class="chart-container">
+    <svg role="img">
+      <title>Presales Engineer Skillset Spider Chart</title>
+      <desc>A radar chart showing skill levels across different presales engineering competencies</desc>
+    </svg>
+    <div class="tooltip"></div>
+  </div>
+</div>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap');
+
+  #presalesSpiderChart {
+    font-family: 'Open Sans', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    background-color: #f8fafc;
+    border-radius: 12px;
+  }
+
+  #presalesSpiderChart h2 {
+    margin: 0 0 20px 0;
+    font-size: 1.5rem;
+    color: #1a202c;
+    font-weight: 600;
+  }
+
+  #presalesSpiderChart .chart-container {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  #presalesSpiderChart svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    overflow: visible;
+  }
+
+  #presalesSpiderChart .tooltip {
+    position: absolute;
+    padding: 8px 12px;
+    background: rgba(45, 55, 72, 0.9);
+    color: #fff;
+    border-radius: 6px;
+    pointer-events: none;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    backdrop-filter: blur(4px);
+  }
+
+  #presalesSpiderChart .axis-label {
+    font-size: 11px;
+    fill: #4a5568;
+    font-weight: 500;
+  }
+
+  #presalesSpiderChart .grid-label {
+    font-size: 9px;
+    fill: #718096;
+  }
+
+  #presalesSpiderChart .radar-area {
+    fill: #4299e1;
+    fill-opacity: 0.3;
+    stroke: #4299e1;
+    stroke-width: 2;
+    transition: all 0.3s ease;
+  }
+
+  #presalesSpiderChart .radar-area:hover {
+    fill-opacity: 0.5;
+  }
+
+  #presalesSpiderChart .radar-dot {
+    fill: #2b6cb0;
+    stroke: #ffffff;
+    stroke-width: 2;
+  }
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function(){
+  const onD3 = cb => window.d3 ? cb() : setTimeout(()=>onD3(cb),50);
+  onD3(initChart);
+
+  function initChart(){
+    // Enhanced dataset with more presales skills
+    const data = [
+      { axis: "Technical Knowledge", value: 0.95 },
+      { axis: "Communication Skills", value: 0.60 },
+      { axis: "Discovery Skills", value: 0.40 },
+      { axis: "Objection Handling", value: 0.80 },
+      { axis: "Demo Delivery", value: 0.85 },
+      { axis: "POC Management", value: 0.70 },
+      { axis: "Business Acumen", value: 0.55 },
+      { axis: "Competitive Intelligence", value: 0.75 }
+    ];
+
+    // Chart configuration
+    const container = document.getElementById('presalesSpiderChart');
+    const chartContainer = container.querySelector('.chart-container');
+    const radius = 180; // Fixed radius
+    const levels = 10; // Changed from 5 to 10 for 10% increments
+    const maxValue = 1.0;
+    const labelDistance = radius + 60; // Extended well beyond chart
+    const dotRadius = 4;
+    const totalAxes = data.length;
+    const angleSlice = (Math.PI * 2) / totalAxes;
+
+    // Setup SVG with proper dimensions for extended lines
+    const svgSize = (labelDistance + 80) * 2;
+    const svg = d3.select(container).select('svg')
+      .attr('viewBox', `${-svgSize/2} ${-svgSize/2} ${svgSize} ${svgSize}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    // Clear any existing content
+    svg.selectAll('*').remove();
+
+    const g = svg.append('g'); // No transform needed - using centered viewBox
+
+    // Scales
+    const rScale = d3.scaleLinear().range([0, radius]).domain([0, maxValue]);
+    const tooltip = d3.select(container).select('.tooltip');
+
+    // Draw concentric circles (grid) with alternating colored bands
+    const gridWrapper = g.append('g').attr('class', 'grid-wrapper');
+    
+    // Create alternating color bands - using complementary blues and light oranges
+    const bandColors = ['#fef7ed', '#fed7aa']; // Very light orange tones that complement blue
+    
+    // Draw filled bands (every other ring)
+    gridWrapper.selectAll('.grid-band')
+      .data(d3.range(1, levels + 1))
+      .enter()
+      .append('circle')
+      .attr('class', 'grid-band')
+      .attr('r', d => (radius / levels) * d)
+      .style('fill', (d, i) => i % 2 === 1 ? bandColors[1] : bandColors[0])
+      .style('fill-opacity', 0.3)
+      .style('stroke', 'none');
+    
+    // Draw circle outlines for structure
+    gridWrapper.selectAll('.grid-circle')
+      .data(d3.range(1, levels + 1))
+      .enter()
+      .append('circle')
+      .attr('class', 'grid-circle')
+      .attr('r', d => (radius / levels) * d)
+      .style('fill', 'none')
+      .style('stroke', '#94a3b8')
+      .style('stroke-width', 0.8)
+      .style('stroke-opacity', 0.7);
+
+    // Grid value labels
+    gridWrapper.selectAll('.grid-label')
+      .data(d3.range(1, levels + 1))
+      .enter()
+      .append('text')
+      .attr('class', 'grid-label')
+      .attr('x', 4)
+      .attr('y', d => -(d * radius / levels))
+      .attr('dy', '0.4em')
+      .text(d => Math.round((maxValue * d / levels) * 100));
+
+    // Draw extended axis lines
+    const axisWrapper = g.append('g').attr('class', 'axis-wrapper');
+    
+    const axes = axisWrapper.selectAll('.axis')
+      .data(data)
+      .enter()
+      .append('g')
+      .attr('class', 'axis');
+
+    // Clean, professional extended axis lines
+    axes.append('line')
+      .attr('x1', 0)
+      .attr('y1', 0)
+      .attr('x2', (d, i) => labelDistance * Math.cos(angleSlice * i - Math.PI / 2))
+      .attr('y2', (d, i) => labelDistance * Math.sin(angleSlice * i - Math.PI / 2))
+      .style('stroke', '#cbd5e0')
+      .style('stroke-width', 1);
+
+    // Labels positioned at line ends
+    axes.append('text')
+      .attr('class', 'axis-label')
+      .attr('dy', '0.35em')
+      .attr('x', (d, i) => {
+        const baseX = labelDistance * Math.cos(angleSlice * i - Math.PI / 2);
+        const angle = angleSlice * i - Math.PI / 2;
+        const cos = Math.cos(angle);
+        if (cos > 0.3) return baseX + 15;
+        if (cos < -0.3) return baseX - 15;
+        return baseX;
+      })
+      .attr('y', (d, i) => {
+        const baseY = labelDistance * Math.sin(angleSlice * i - Math.PI / 2);
+        const angle = angleSlice * i - Math.PI / 2;
+        const sin = Math.sin(angle);
+        if (sin > 0.3) return baseY + 12;
+        if (sin < -0.3) return baseY - 12;
+        return baseY;
+      })
+      .style('text-anchor', (d, i) => {
+        const angle = angleSlice * i - Math.PI / 2;
+        const cos = Math.cos(angle);
+        if (cos > 0.3) return 'start';
+        if (cos < -0.3) return 'end';
+        return 'middle';
+      })
+      .text(d => d.axis)
+      .call(wrapText, 90);
+
+    // Draw radar area and line
+    const radarWrapper = g.append('g').attr('class', 'radar-wrapper');
+
+    const radarLine = d3.lineRadial()
+      .curve(d3.curveLinearClosed)
+      .radius(d => rScale(d.value))
+      .angle((d, i) => i * angleSlice);
+
+    // Radar filled area
+    radarWrapper.append('path')
+      .datum(data)
+      .attr('class', 'radar-area')
+      .attr('d', radarLine);
+
+    // Radar dots
+    radarWrapper.selectAll('.radar-dot')
+      .data(data)
+      .enter()
+      .append('circle')
+      .attr('class', 'radar-dot')
+      .attr('r', dotRadius)
+      .attr('cx', (d, i) => rScale(d.value) * Math.cos(angleSlice * i - Math.PI / 2))
+      .attr('cy', (d, i) => rScale(d.value) * Math.sin(angleSlice * i - Math.PI / 2));
+
+    // Interactive invisible circles for tooltips
+    radarWrapper.selectAll('.radar-hover')
+      .data(data)
+      .enter()
+      .append('circle')
+      .attr('class', 'radar-hover')
+      .attr('r', dotRadius * 2)
+      .attr('cx', (d, i) => rScale(d.value) * Math.cos(angleSlice * i - Math.PI / 2))
+      .attr('cy', (d, i) => rScale(d.value) * Math.sin(angleSlice * i - Math.PI / 2))
+      .style('fill', 'transparent')
+      .style('cursor', 'pointer')
+      .on('mouseover', function(event, d) {
+        const rect = chartContainer.getBoundingClientRect();
+        tooltip.transition().duration(200).style('opacity', 0.9);
+        tooltip.html(`<strong>${d.axis}</strong><br/>Score: ${Math.round(d.value * 100)}%`)
+          .style('left', (event.clientX - rect.left + 10) + 'px')
+          .style('top', (event.clientY - rect.top - 10) + 'px');
+      })
+      .on('mouseout', function() {
+        tooltip.transition().duration(300).style('opacity', 0);
+      });
+
+    // Text wrapping helper function
+    function wrapText(text, width) {
+      text.each(function() {
+        const text = d3.select(this);
+        const words = text.text().split(/\s+/).reverse();
+        let word;
+        let line = [];
+        let lineNumber = 0;
+        const lineHeight = 1.1;
+        const y = text.attr('y');
+        const x = text.attr('x');
+        const dy = parseFloat(text.attr('dy')) || 0;
+        let tspan = text.text(null).append('tspan').attr('x', x).attr('y', y).attr('dy', dy + 'em');
+
+        while (word = words.pop()) {
+          line.push(word);
+          tspan.text(line.join(' '));
+          if (tspan.node().getComputedTextLength() > width) {
+            line.pop();
+            tspan.text(line.join(' '));
+            line = [word];
+            tspan = text.append('tspan').attr('x', x).attr('y', y).attr('dy', ++lineNumber * lineHeight + dy + 'em').text(word);
+          }
+        }
+      });
+    }
+  }
+})();
+</script></div>
